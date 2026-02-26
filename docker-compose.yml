@@ -1,13 +1,14 @@
 services:
-  local-content-share-ttr:
+  lcs-ttr:
+    image: thetechrun/lcs-ttr:main
     container_name: lcs-ttr
-    build:
-      context: .
-      dockerfile: Dockerfile
     env_file:
       - .env
     ports:
-      - "5006:8080"
+      - "8080:8080"
     volumes:
-      - ./../data:/app/data
+      - lcs-data:/app/data
     restart: unless-stopped
+
+volumes:
+  lcs-data:
