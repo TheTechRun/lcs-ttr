@@ -1,7 +1,12 @@
 package main
 
 import (
+	"crypto/hmac"
+	cryptorand "crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +41,43 @@ type Entry struct {
 	Content  string
 	Type     string
 	Filename string
+	Size     int64
+	ModTime  time.Time
+	Category string
+	LinkTitle string
+	LinkURL   string
+	LinkStored string
+}
+
+type Category struct {
+	Name       string
+	FileCount  int
+	TextCount  int
+	LinkCount  int
+	TotalCount int
+}
+
+type HomePageData struct {
+	Categories []Category
+}
+
+type CategoryPageData struct {
+	Category string
+	Entries  []Entry
+	Texts    []Entry
+	Files    []Entry
+	Links    []Entry
+}
+
+type LoginPageData struct {
+	Error string
+}
+
+type AuthConfig struct {
+	Username          string
+	Password          string
+	SecretKey         string
+	SessionExpiryDays int
 }
 
 type ExpirationTracker struct {
@@ -44,6 +87,149 @@ type ExpirationTracker struct {
 
 var expirationTracker *ExpirationTracker
 var expirationOptions = []string{"Never", "1 hour", "4 hours", "1 day", "Custom"}
+var validCategoryName = regexp.MustCompile(`^[\p{L}\p{N}\-_]+$`)
+var reservedNames = map[string]bool{"notepad": true, "files": true, "text": true}
+
+const authCookieName = "lcs_auth_token"
+
+func loadAuthConfig() (*AuthConfig, error) {
+	username := strings.TrimSpace(os.Getenv("LCS_USERNAME"))
+	password := os.Getenv("LCS_PASSWORD")
+	secretKey := os.Getenv("LCS_SECRET_KEY")
+	if username == "" || password == "" || secretKey == "" {
+		return nil, fmt.Errorf("missing auth env vars: LCS_USERNAME, LCS_PASSWORD, and LCS_SECRET_KEY must be set")
+	}
+
+	sessionExpiryDays := 30
+	sessionExpiryRaw := strings.TrimSpace(os.Getenv("LCS_SESSION_EXPIRY_DAYS"))
+	if sessionExpiryRaw != "" {
+		parsed, err := strconv.Atoi(sessionExpiryRaw)
+		if err != nil || parsed <= 0 {
+			return nil, fmt.Errorf("invalid LCS_SESSION_EXPIRY_DAYS value %q: expected a positive integer", sessionExpiryRaw)
+		}
+		sessionExpiryDays = parsed
+	}
+
+	return &AuthConfig{
+		Username:          username,
+		Password:          password,
+		SecretKey:         secretKey,
+		SessionExpiryDays: sessionExpiryDays,
+	}, nil
+}
+
+func (a *AuthConfig) credentialsMatch(username, password string) bool {
+	usernameOK := subtle.ConstantTimeCompare(
+		[]byte(strings.ToLower(strings.TrimSpace(username))),
+		[]byte(strings.ToLower(a.Username)),
+	) == 1
+	passwordOK := subtle.ConstantTimeCompare([]byte(password), []byte(a.Password)) == 1
+	return usernameOK && passwordOK
+}
+
+func (a *AuthConfig) signPayload(payload string) string {
+	mac := hmac.New(sha256.New, []byte(a.SecretKey))
+	_, _ = mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (a *AuthConfig) createSessionToken() (string, time.Time, error) {
+	nonce := make([]byte, 16)
+	if _, err := cryptorand.Read(nonce); err != nil {
+		return "", time.Time{}, err
+	}
+
+	expiry := time.Now().Add(time.Duration(a.SessionExpiryDays) * 24 * time.Hour).UTC()
+	payload := fmt.Sprintf("%s|%d|%s",
+		strings.ToLower(a.Username),
+		expiry.Unix(),
+		base64.RawURLEncoding.EncodeToString(nonce),
+	)
+	signature := a.signPayload(payload)
+	token := base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + signature
+	return token, expiry, nil
+}
+
+func (a *AuthConfig) isSessionTokenValid(token string) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		return false
+	}
+
+	payloadRaw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	payload := string(payloadRaw)
+	expectedSignature := a.signPayload(payload)
+	if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(expectedSignature)) != 1 {
+		return false
+	}
+
+	fields := strings.Split(payload, "|")
+	if len(fields) != 3 {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(fields[0]), []byte(strings.ToLower(a.Username))) != 1 {
+		return false
+	}
+
+	expiryUnix, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().Before(time.Unix(expiryUnix, 0).UTC())
+}
+
+func setAuthCookie(w http.ResponseWriter, r *http.Request, token string, expiry time.Time) {
+	secureCookie := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expiry,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secureCookie,
+	})
+}
+
+func clearAuthCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func isPublicRoute(path string) bool {
+	if path == "/login" || path == "/favicon.ico" || path == "/manifest.json" || path == "/icon-192.png" || path == "/icon-512.png" {
+		return true
+	}
+	return strings.HasPrefix(path, "/static/")
+}
+
+func withAuth(authConfig *AuthConfig, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicRoute(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		cookie, err := r.Cookie(authCookieName)
+		if err != nil || !authConfig.isSessionTokenValid(cookie.Value) {
+			clearAuthCookie(w)
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 func initExpirationTracker() *ExpirationTracker {
 	tracker := &ExpirationTracker{
@@ -208,6 +394,172 @@ func generateUniqueFilename(baseDir, baseName string) string {
 	}
 }
 
+func sanitizeSingleLine(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "\t", " ")
+	return strings.TrimSpace(value)
+}
+
+func parseStoredLink(line string) (string, string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", ""
+	}
+
+	parts := strings.SplitN(line, "\t", 2)
+	if len(parts) != 2 {
+		return line, line
+	}
+
+	title := strings.TrimSpace(parts[0])
+	linkURL := strings.TrimSpace(parts[1])
+	if linkURL == "" {
+		linkURL = title
+	}
+	if title == "" {
+		title = linkURL
+	}
+	return title, linkURL
+}
+
+func scanCategories() ([]Category, error) {
+	entries, err := os.ReadDir("data")
+	if err != nil {
+		return nil, err
+	}
+
+	var categories []Category
+	for _, e := range entries {
+		if !e.IsDir() || reservedNames[e.Name()] {
+			continue
+		}
+
+		cat := Category{Name: e.Name()}
+
+		textFiles, _ := os.ReadDir(filepath.Join("data", e.Name(), "text"))
+		for _, f := range textFiles {
+			if !f.IsDir() {
+				cat.TextCount++
+			}
+		}
+
+		files, _ := os.ReadDir(filepath.Join("data", e.Name(), "files"))
+		for _, f := range files {
+			if !f.IsDir() {
+				cat.FileCount++
+			}
+		}
+
+		linkData, err := os.ReadFile(filepath.Join("data", e.Name(), "links.file"))
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(linkData)), "\n") {
+				if strings.TrimSpace(line) != "" {
+					cat.LinkCount++
+				}
+			}
+		}
+
+		cat.TotalCount = cat.FileCount + cat.TextCount + cat.LinkCount
+		categories = append(categories, cat)
+	}
+
+	sort.Slice(categories, func(i, j int) bool {
+		return categories[i].Name < categories[j].Name
+	})
+
+	return categories, nil
+}
+
+func loadCategoryEntries(category string) []Entry {
+	var entries []Entry
+
+	textFiles, _ := os.ReadDir(filepath.Join("data", category, "text"))
+	for _, file := range textFiles {
+		if file.IsDir() {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join("data", category, "text", file.Name()))
+		if err != nil {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			info = nil
+		}
+
+		var modTime time.Time
+		var size int64
+		if info != nil {
+			modTime = info.ModTime()
+			size = info.Size()
+		}
+
+		entries = append(entries, Entry{
+			ID:       filepath.Join(category, "text", file.Name()),
+			Type:     "text",
+			Content:  string(data),
+			Filename: file.Name(),
+			ModTime:  modTime,
+			Size:     size,
+			Category: category,
+		})
+	}
+
+	files, _ := os.ReadDir(filepath.Join("data", category, "files"))
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			info = nil
+		}
+
+		var modTime time.Time
+		var size int64
+		if info != nil {
+			modTime = info.ModTime()
+			size = info.Size()
+		}
+
+		entries = append(entries, Entry{
+			ID:       filepath.Join(category, "files", file.Name()),
+			Type:     "file",
+			Filename: file.Name(),
+			ModTime:  modTime,
+			Size:     size,
+			Category: category,
+		})
+	}
+
+	linkData, err := os.ReadFile(filepath.Join("data", category, "links.file"))
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(linkData)), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			title, linkURL := parseStoredLink(line)
+			entries = append(entries, Entry{
+				ID:       category + "/link/" + url.PathEscape(line),
+				Type:     "link",
+				Content:  linkURL,
+				Filename: title,
+				Category: category,
+				LinkTitle: title,
+				LinkURL:   linkURL,
+				LinkStored: line,
+			})
+		}
+	}
+
+	return entries
+}
+
 func handleContentUpdates(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -258,18 +610,16 @@ func notifyContentChange() {
 func main() {
 	flag.Parse()
 
-	if err := os.MkdirAll(filepath.Join("data", "files"), 0755); err != nil {
+	authConfig, err := loadAuthConfig()
+	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join("data", "text"), 0755); err != nil {
-		log.Fatal(err)
-	}
+
 	if err := os.MkdirAll(filepath.Join("data", "notepad"), 0755); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("Data directory created/reused without errors.")
 	createFileIfNotExists("notepad/md.file", mdPlaceholder)
-	createFileIfNotExists("links.file", "")
 
 	// Initialize the expiration tracker
 	expirationTracker = initExpirationTracker()
@@ -298,57 +648,157 @@ func main() {
 
 	tmpl := template.Must(template.ParseFS(content, "templates/*.html"))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Clean up expired files on page load
-		expirationTracker.CleanupExpired()
-		entries := []Entry{}
-		// Read text snippets
-		textFiles, _ := os.ReadDir(filepath.Join("data", "text"))
-		for _, file := range textFiles {
-			if file.IsDir() {
-				continue
+	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		switch r.Method {
+		case http.MethodGet:
+			cookie, err := r.Cookie(authCookieName)
+			if err == nil && authConfig.isSessionTokenValid(cookie.Value) {
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
 			}
-			data, err := os.ReadFile(filepath.Join("data", "text", file.Name()))
+			_ = tmpl.ExecuteTemplate(w, "login.html", LoginPageData{})
+		case http.MethodPost:
+			username := r.FormValue("username")
+			password := r.FormValue("password")
+			if !authConfig.credentialsMatch(username, password) {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = tmpl.ExecuteTemplate(w, "login.html", LoginPageData{Error: "Invalid username or password"})
+				return
+			}
+
+			token, expiry, err := authConfig.createSessionToken()
 			if err != nil {
-				continue
+				http.Error(w, "Failed to create session", http.StatusInternalServerError)
+				return
 			}
-			entries = append(entries, Entry{
-				ID:       filepath.Join("text", file.Name()),
-				Type:     "text",
-				Content:  string(data),
-				Filename: file.Name(),
-			})
+			setAuthCookie(w, r, token, expiry)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-		// Read files
-		files, _ := os.ReadDir(filepath.Join("data", "files"))
-		for _, file := range files {
-			if file.IsDir() {
-				continue
+	})
+
+	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		clearAuthCookie(w)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		expirationTracker.CleanupExpired()
+		categories, err := scanCategories()
+		if err != nil {
+			http.Error(w, "Failed to scan categories", http.StatusInternalServerError)
+			return
+		}
+		tmpl.ExecuteTemplate(w, "index.html", HomePageData{Categories: categories})
+	})
+
+	http.HandleFunc("/c/", func(w http.ResponseWriter, r *http.Request) {
+		category := strings.TrimPrefix(r.URL.Path, "/c/")
+		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+			http.Error(w, "Invalid category", http.StatusBadRequest)
+			return
+		}
+		if _, err := os.Stat(filepath.Join("data", category)); os.IsNotExist(err) {
+			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+
+		expirationTracker.CleanupExpired()
+		entries := loadCategoryEntries(category)
+		var texts []Entry
+		var files []Entry
+		var links []Entry
+		for _, entry := range entries {
+			switch entry.Type {
+			case "text":
+				texts = append(texts, entry)
+			case "file":
+				files = append(files, entry)
+			case "link":
+				links = append(links, entry)
 			}
-			entries = append(entries, Entry{
-				ID:       filepath.Join("files", file.Name()),
-				Type:     "file",
-				Filename: file.Name(),
-			})
 		}
-		// Read links
-		data, err := os.ReadFile(filepath.Join("data", "links.file"))
-		if err == nil {
-			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				entries = append(entries, Entry{
-					ID:       "link/" + url.PathEscape(line),
-					Type:     "link",
-					Content:  line,
-					Filename: line,
-				})
+
+		tmpl.ExecuteTemplate(w, "category.html", CategoryPageData{
+			Category: category,
+			Entries:  entries,
+			Texts:    texts,
+			Files:    files,
+			Links:    links,
+		})
+	})
+
+	http.HandleFunc("/category/create", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		name := strings.TrimSpace(r.FormValue("name"))
+		if name == "" || !validCategoryName.MatchString(name) || reservedNames[name] {
+			http.Error(w, "Invalid category name", http.StatusBadRequest)
+			return
+		}
+		catPath := filepath.Join("data", name)
+		if _, err := os.Stat(catPath); err == nil {
+			http.Error(w, "Category already exists", http.StatusConflict)
+			return
+		}
+		if err := os.MkdirAll(filepath.Join(catPath, "files"), 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := os.MkdirAll(filepath.Join(catPath, "text"), 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		notifyContentChange()
+		http.Redirect(w, r, "/c/"+name, http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/category/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		name := strings.TrimSpace(r.FormValue("name"))
+		if name == "" || reservedNames[name] || strings.Contains(name, "/") {
+			http.Error(w, "Invalid category name", http.StatusBadRequest)
+			return
+		}
+		catPath := filepath.Join("data", name)
+		if _, err := os.Stat(catPath); os.IsNotExist(err) {
+			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+
+		expirationTracker.mu.Lock()
+		for key := range expirationTracker.Expirations {
+			if strings.HasPrefix(key, name+"/") {
+				delete(expirationTracker.Expirations, key)
 			}
 		}
-		tmpl.ExecuteTemplate(w, "index.html", entries)
+		expirationTracker.saveToFile()
+		expirationTracker.mu.Unlock()
+
+		if err := os.RemoveAll(catPath); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		notifyContentChange()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	http.HandleFunc("/md", func(w http.ResponseWriter, r *http.Request) {
@@ -497,9 +947,18 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		category := strings.TrimSpace(r.FormValue("category"))
+		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+			http.Error(w, "Invalid category", http.StatusBadRequest)
+			return
+		}
+		if _, err := os.Stat(filepath.Join("data", category)); os.IsNotExist(err) {
+			http.Error(w, "Category not found", http.StatusBadRequest)
+			return
+		}
 		entryType := r.FormValue("type")
 		expiryOption := r.FormValue("expiry")
-		content := r.FormValue("content")
+		content := strings.TrimSpace(r.FormValue("content"))
 		name := r.FormValue("name")
 		if entryType == "link" {
 			// Handle link submission
@@ -507,23 +966,28 @@ func main() {
 				http.Error(w, "URL content cannot be empty", http.StatusBadRequest)
 				return
 			}
+			linkTitle := sanitizeSingleLine(r.FormValue("title"))
 			u, err := url.ParseRequestURI(content)
 			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 				http.Error(w, "Invalid URL format. Must start with http:// or https://", http.StatusBadRequest)
 				return
 			}
-			linksFilePath := filepath.Join("data", "links.file")
+			if linkTitle == "" {
+				linkTitle = content
+			}
+			linksFilePath := filepath.Join("data", category, "links.file")
 			f, err := os.OpenFile(linksFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			defer f.Close()
-			if _, err := f.WriteString(content + "\n"); err != nil {
+			storedLine := fmt.Sprintf("%s\t%s", linkTitle, content)
+			if _, err := f.WriteString(storedLine + "\n"); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			log.Printf("Saved link %s\n", content)
+			log.Printf("Saved link %s (%s)\n", linkTitle, content)
 		} else {
 			// Handle file and text submission
 			files := r.MultipartForm.File["file-upload"]
@@ -540,8 +1004,9 @@ func main() {
 						if fileName == "" {
 							fileName = fileHeader.Filename
 						}
-						uniqueFileName := generateUniqueFilename("data/files", fileName)
-						f, err := os.Create(filepath.Join("data/files", uniqueFileName))
+						filesDir := filepath.Join("data", category, "files")
+						uniqueFileName := generateUniqueFilename(filesDir, fileName)
+						f, err := os.Create(filepath.Join(filesDir, uniqueFileName))
 						if err != nil {
 							return err
 						}
@@ -550,7 +1015,7 @@ func main() {
 							return err
 						}
 						if expiryOption != "Never" {
-							fileID := filepath.Join("files", uniqueFileName)
+							fileID := filepath.Join(category, "files", uniqueFileName)
 							expirationTracker.SetExpiration(fileID, expiryOption)
 						}
 						log.Printf("Saved file %s with expiry %s\n", uniqueFileName, expiryOption)
@@ -567,14 +1032,15 @@ func main() {
 				if filename == "" {
 					filename = time.Now().Format("Jan-02 15-04-05")
 				}
-				uniqueFileName := generateUniqueFilename("data/text", filename)
-				err := os.WriteFile(filepath.Join("data/text", uniqueFileName), []byte(content), 0644)
+				textDir := filepath.Join("data", category, "text")
+				uniqueFileName := generateUniqueFilename(textDir, filename)
+				err := os.WriteFile(filepath.Join(textDir, uniqueFileName), []byte(content), 0644)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				if expiryOption != "Never" {
-					fileID := filepath.Join("text", uniqueFileName)
+					fileID := filepath.Join(category, "text", uniqueFileName)
 					expirationTracker.SetExpiration(fileID, expiryOption)
 				}
 				log.Printf("Saved text snippet %s with expiry %s\n", uniqueFileName, expiryOption)
@@ -587,7 +1053,76 @@ func main() {
 			w.Write([]byte("Success"))
 			return
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+category, http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/link/edit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		category := strings.TrimSpace(r.FormValue("category"))
+		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+			http.Error(w, "Invalid category", http.StatusBadRequest)
+			return
+		}
+		oldLine := strings.TrimSpace(r.FormValue("old_line"))
+		if oldLine == "" {
+			http.Error(w, "Missing original link", http.StatusBadRequest)
+			return
+		}
+
+		linkTitle := sanitizeSingleLine(r.FormValue("title"))
+		linkURL := strings.TrimSpace(r.FormValue("url"))
+		if linkURL == "" {
+			http.Error(w, "URL cannot be empty", http.StatusBadRequest)
+			return
+		}
+		u, err := url.ParseRequestURI(linkURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			http.Error(w, "Invalid URL format. Must start with http:// or https://", http.StatusBadRequest)
+			return
+		}
+		if linkTitle == "" {
+			linkTitle = linkURL
+		}
+		newLine := fmt.Sprintf("%s\t%s", linkTitle, linkURL)
+
+		linksFilePath := filepath.Join("data", category, "links.file")
+		data, err := os.ReadFile(linksFilePath)
+		if err != nil {
+			http.Error(w, "Failed to read links file", http.StatusInternalServerError)
+			return
+		}
+		lines := strings.Split(string(data), "\n")
+		var outLines []string
+		var replaced bool
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			if trimmed == oldLine && !replaced {
+				outLines = append(outLines, newLine)
+				replaced = true
+				continue
+			}
+			outLines = append(outLines, line)
+		}
+		if !replaced {
+			http.Error(w, "Link not found", http.StatusNotFound)
+			return
+		}
+		output := strings.Join(outLines, "\n")
+		if output != "" {
+			output += "\n"
+		}
+		if err := os.WriteFile(linksFilePath, []byte(output), 0644); err != nil {
+			http.Error(w, "Failed to update links file", http.StatusInternalServerError)
+			return
+		}
+		notifyContentChange()
+		http.Redirect(w, r, "/c/"+category, http.StatusSeeOther)
 	})
 
 	http.HandleFunc("/rename/", func(w http.ResponseWriter, r *http.Request) {
@@ -626,13 +1161,19 @@ func main() {
 			return
 		}
 		notifyContentChange()
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		parts := strings.SplitN(oldPath, "/", 2)
+		redirectTarget := "/"
+		if len(parts) > 0 && parts[0] != "" {
+			redirectTarget = "/c/" + parts[0]
+		}
+		http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 		log.Printf("Renamed %s to %s\n", oldPath, newName)
 	})
 
 	http.HandleFunc("/raw/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/raw/")
-		if !strings.HasPrefix(id, "text/") {
+		parts := strings.SplitN(id, "/", 3)
+		if len(parts) != 3 || parts[1] != "text" {
 			http.Error(w, "Only text files can be accessed", http.StatusBadRequest)
 			return
 		}
@@ -713,11 +1254,19 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		id := strings.TrimPrefix(r.URL.Path, "/delete/")
-		// Handle link deletion
-		if after, ok := strings.CutPrefix(id, "link/"); ok {
-			linkToDelete := after
-			linksFilePath := filepath.Join("data", "links.file")
+		rawPath := r.URL.RawPath
+		if rawPath == "" {
+			rawPath = r.URL.Path
+		}
+		id := strings.TrimPrefix(rawPath, "/delete/")
+		if linkIdx := strings.Index(id, "/link/"); linkIdx != -1 {
+			category := id[:linkIdx]
+			linkToDelete, err := url.PathUnescape(id[linkIdx+len("/link/"):])
+			if err != nil {
+				http.Error(w, "Invalid link identifier", http.StatusBadRequest)
+				return
+			}
+			linksFilePath := filepath.Join("data", category, "links.file")
 			data, err := os.ReadFile(linksFilePath)
 			if err != nil {
 				http.Error(w, "Failed to read links file for deletion", http.StatusInternalServerError)
@@ -728,7 +1277,7 @@ func main() {
 			var found bool
 			for _, line := range lines {
 				if strings.TrimSpace(line) == strings.TrimSpace(linkToDelete) && !found {
-					found = true // Remove only the first occurrence
+					found = true
 					continue
 				}
 				if strings.TrimSpace(line) != "" {
@@ -736,7 +1285,6 @@ func main() {
 				}
 			}
 			output := strings.Join(newLines, "\n")
-			// Add newline for correctness
 			if output != "" {
 				output += "\n"
 			}
@@ -748,12 +1296,17 @@ func main() {
 			notifyContentChange()
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "ok"}`))
+			w.Write([]byte(`{"status":"ok"}`))
 			log.Printf("Deleted link %s\n", linkToDelete)
 			return
 		}
-		// Handle file and snippet deletion
-		err := os.Remove(filepath.Join("data", id))
+
+		id, err := url.PathUnescape(id)
+		if err != nil {
+			http.Error(w, "Invalid item identifier", http.StatusBadRequest)
+			return
+		}
+		err = os.Remove(filepath.Join("data", id))
 		if err != nil {
 			log.Printf("Failed to delete %s: %v", id, err)
 			http.Error(w, "Failed to delete file", http.StatusInternalServerError)
@@ -766,7 +1319,7 @@ func main() {
 		notifyContentChange()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		w.Write([]byte(`{"status":"ok"}`))
 		log.Printf("Deleted %s\n", id)
 	})
 
@@ -776,7 +1329,8 @@ func main() {
 			return
 		}
 		id := strings.TrimPrefix(r.URL.Path, "/edit/")
-		if !strings.HasPrefix(id, "text/") {
+		parts := strings.SplitN(id, "/", 3)
+		if len(parts) != 3 || parts[1] != "text" {
 			http.Error(w, "Can only edit text snippets", http.StatusBadRequest)
 			return
 		}
@@ -791,7 +1345,7 @@ func main() {
 			return
 		}
 		notifyContentChange()
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+parts[0], http.StatusSeeOther)
 		log.Printf("Edited %s\n", id)
 	})
 
@@ -799,7 +1353,7 @@ func main() {
 	http.HandleFunc("/api/updates", handleContentUpdates)
 
 	// Start server
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
+	log.Fatal(http.ListenAndServe(*listenAddress, withAuth(authConfig, http.DefaultServeMux)))
 }
 
 // Helper function to create files if they don't exist

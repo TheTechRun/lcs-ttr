@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local Content Share</title>
+    <title>Local Content Share TTR</title>
     <link rel="stylesheet" href="/static/fontawesome/css/all.min.css">
     <link href="/static/css/inter.css" rel="stylesheet">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    
+
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#cba6f7"> <!-- mauve:dark -->
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/icon-192.png">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="ContentShare">
+    <meta name="apple-mobile-web-app-title" content="ContentShareTTR">
     <meta name="format-detection" content="telephone=no">
 
     <style>
@@ -94,543 +94,196 @@
     </style>
 </head>
 <body class="bg-crust text-text antialiased transition-colors duration-300">
+<div class="container mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
 
-    <div class="container mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+    <header class="text-center mb-8 relative">
+        <h1 class="text-3xl sm:text-4xl font-bold text-mauve">Local Content Share TTR</h1>
+        <form action="/logout" method="POST" class="absolute right-0 top-1/2 -translate-y-1/2">
+            <button type="submit" class="flex items-center gap-2 px-3 py-2 bg-base hover:bg-surface0 rounded-xl transition-colors">
+                <i class="fas fa-sign-out-alt text-subtext0"></i>
+                <span class="font-medium text-sm text-subtext0 hidden sm:inline">Logout</span>
+            </button>
+        </form>
+    </header>
 
-        <header class="text-center mb-8">
-            <h1 class="text-3xl sm:text-4xl font-bold text-mauve">Local-Content-Share</h1>
-        </header>
-
-        <main class="flex flex-col gap-8">
-            <section class="w-full">
-                <div class="flex flex-wrap items-center justify-center gap-3 mb-4">
-                    <button id="new-link-button" type="button" class="flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface0 rounded-xl cursor-pointer transition-colors">
-                        <i class="fas fa-link text-subtext0"></i>
-                        <span class="font-medium text-sm text-subtext0">Link</span>
-                    </button>
-                    <button type="button" id="new-button" class="flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface0 rounded-xl cursor-pointer transition-colors">
-                        <i class="fas fa-pen-nib text-subtext0"></i>
-                        <span class="font-medium text-sm text-subtext0">New</span>
-                    </button>
-                    <a href="/md" class="flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface0 rounded-xl transition-colors no-underline">
-                        <i class="fas fa-note-sticky text-subtext0"></i>
-                        <span class="font-medium text-sm text-subtext0">Notepad</span>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Snippets Section -->
-            <section class="content-section">
-                <h2 class="text-2xl font-semibold mb-4 text-center text-text">Snippets</h2>
-                <div id="snippets-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {{range .}}{{if eq .Type "text"}}
-                    <div class="flex items-center justify-between bg-base border border-transparent hover:border-surface1 rounded-3xl px-4 py-2 transition-colors duration-300 relative cursor-pointer" onclick="showViewModal('{{.ID}}', '{{.Filename}}')">
-                        <div class="font-medium truncate text-text mr-2">{{.Filename}}</div>
-                        <div class="flex items-center gap-0 sm:gap-1 flex-shrink-0">
-                            <button onclick="event.stopPropagation(); showRenameModal('{{.ID}}', '{{.Filename}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Rename"><i class="fas fa-i-cursor"></i></button>
-                            <button onclick="event.stopPropagation(); showEditForm('{{.ID}}', '{{.Filename}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Edit"><i class="fas fa-pen"></i></button>
-                            <button onclick="event.stopPropagation(); copyToClipboard('{{.Content}}', this)" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Copy"><i class="fas fa-copy"></i></button>
-                            <button onclick="event.stopPropagation(); deleteItem('{{.ID}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Delete"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </div>
-                    {{end}}{{end}}
-                </div>
-            </section>
-
-            <!-- Files Section -->
-            <section class="content-section">
-                <h2 class="text-2xl font-semibold mb-4 text-center text-text">Files</h2>
-                <div id="files-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {{range .}}{{if eq .Type "file"}}
-                    <div class="flex items-center justify-between bg-base border border-transparent hover:border-surface1 rounded-3xl px-4 py-2 transition-colors duration-300">
-                        <div class="font-medium truncate text-text mr-2">{{.Filename}}</div>
-                        <div class="flex items-center gap-0 sm:gap-1 flex-shrink-0">
-                            <button onclick="event.stopPropagation(); showRenameModal('{{.ID}}', '{{.Filename}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Rename"><i class="fas fa-i-cursor"></i></button>
-                            <a href="/download/{{.ID}}" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors no-underline" title="Download"><i class="fas fa-download"></i></a>
-                            <a href="/view/{{.ID}}" target="_blank" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors no-underline" title="View"><i class="fas fa-eye"></i></a>
-                            <button onclick="event.stopPropagation(); deleteItem('{{.ID}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Delete"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </div>
-                    {{end}}{{end}}
-                </div>
-            </section>
-
-            <!-- Links Section -->
-            <section class="content-section">
-                <h2 class="text-2xl font-semibold mb-4 text-center text-text">Links</h2>
-                <div id="links-list" class="flex flex-col gap-2">
-                    {{range .}}{{if eq .Type "link"}}
-                    <a href="{{.Content}}" target="_blank" rel="noopener noreferrer" class="block bg-base border border-transparent hover:border-surface1 rounded-3xl px-4 py-2 transition-colors duration-300 no-underline group">
-                        <div class="flex items-center justify-between">
-                            <div class="font-medium truncate text-text mr-2">{{.Content}}</div>
-                            <div class="flex items-center gap-0 sm:gap-1 flex-shrink-0">
-                                <button onclick="event.preventDefault(); event.stopPropagation(); copyToClipboard('{{.Content}}', this)" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Copy"><i class="fas fa-copy"></i></button>
-                                <button onclick="event.preventDefault(); event.stopPropagation(); deleteItem('{{.ID}}')" class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-colors" title="Delete"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </div>
-                    </a>
-                    {{end}}{{end}}
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- New Item Modal -->
-    <div id="new-item-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
-        <div id="modal-backdrop" class="absolute inset-0"></div>
-        <div class="bg-crust rounded-3xl p-4 w-full max-w-lg z-10">
-            <form id="new-item-form" action="/submit" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="expiry" id="expiryValue" value="Never">
-                <div class="mb-4">
-                    <label for="file-upload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-surface0 border-dashed rounded-2xl cursor-pointer bg-base hover:bg-surface0 transition-all">
-                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                            <i class="fas fa-cloud-upload-alt text-3xl text-overlay2 mb-2"></i>
-                            <p class="text-sm text-overlay2"><span class="font-semibold">Click to upload</span>, drag & drop, or paste</p>
-                            <p id="file-name-display" class="text-xs text-blue mt-2 font-medium"></p>
-                        </div>
-                        <input id="file-upload" name="file-upload" type="file" class="hidden" multiple />
-                    </label>
-                </div>
-                <div class="mb-4">
-                     <input type="text" name="name" placeholder="Name (optional)" class="w-full bg-base px-4 py-3 text-text placeholder-overlay1 focus:outline-none rounded-2xl">
-                </div>
-                <div>
-                    <textarea name="content" placeholder="Content (uploaded files are prioritized when both are provided)" rows="4" class="w-full bg-base px-4 py-3 text-text placeholder-overlay1 focus:outline-none resize-y rounded-2xl"></textarea>
-                </div>
-                <div id="progress-container" class="w-full bg-surface0 rounded-full h-2.5 my-4 hidden">
-                    <div id="progress-bar" class="bg-blue h-2.5 rounded-full" style="width: 0%"></div>
-                </div>
-                <div class="grid grid-cols-3 gap-3 mt-3">
-                    <button type="button" id="expiry-button" class="flex items-center justify-center gap-2 py-2 bg-base hover:bg-surface0 rounded-xl cursor-pointer transition-colors">
-                        <i class="fas fa-clock text-subtext0"></i>
-                        <span id="expiry-text" class="font-medium text-sm text-subtext0">Never</span>
-                    </button>
-                    <button type="button" id="cancel-button" class="py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium text-sm">Cancel</button>
-                    <button type="submit" class="py-2 bg-blue hover:bg-sapphire text-crust font-semibold rounded-xl transition-colors text-sm">Submit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- New Link Modal -->
-    <div id="new-link-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
-        <div id="link-modal-backdrop" class="absolute inset-0"></div>
-        <div class="bg-crust rounded-3xl p-6 w-full max-w-md z-10">
-            <h3 class="text-lg font-medium text-text mb-4">Add a new Link</h3>
-            <form id="new-link-form" action="/submit" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="type" value="link">
-                <input type="url" name="content" required placeholder="https://example.com" class="w-full bg-base px-4 py-3 text-text placeholder-overlay1 focus:outline-none rounded-2xl mb-6">
-                <div class="flex justify-end gap-4">
-                    <button type="button" id="link-cancel-button" class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-blue hover:bg-sapphire text-crust font-semibold rounded-xl transition-colors">Submit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Rename Modal -->
-    <div id="rename-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
-        <div id="rename-modal-backdrop" class="absolute inset-0"></div>
-        <div class="bg-crust rounded-3xl p-6 w-full max-w-md z-10">
-            <h3 class="text-lg font-medium text-text mb-2">Rename Item</h3>
-            <p class="text-sm text-subtext1 mb-4">Current name: <code id="old-name-display" class="bg-base text-peach rounded-md px-1 py-0.5"></code></p>
-            <form id="rename-form" method="POST">
-                <input type="text" id="new-name-input" name="newname" required placeholder="Enter new name" class="w-full bg-base px-4 py-3 text-text placeholder-overlay1 focus:outline-none rounded-2xl mb-6">
-                <div class="flex justify-end gap-4">
-                    <button type="button" id="rename-cancel-button" class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-blue hover:bg-sapphire text-crust font-semibold rounded-xl transition-colors">Rename</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- View Snippet Modal -->
-    <div id="view-snippet-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
-        <div id="view-modal-backdrop" class="absolute inset-0"></div>
-        <div class="bg-crust rounded-3xl p-4 w-full max-w-4xl h-full max-h-[80vh] flex flex-col z-10">
-            <h3 id="view-snippet-title" class="text-lg font-medium text-text mb-4 truncate"></h3>
-            <div class="flex-grow bg-base rounded-2xl p-4 overflow-y-auto mb-4">
-                <pre id="view-snippet-content" class="text-text whitespace-pre-wrap break-words"></pre>
+    <main class="flex flex-col gap-8">
+        <section class="w-full">
+            <div class="flex flex-wrap items-center justify-center gap-3 mb-6">
+                <button id="new-category-button" type="button"
+                    class="flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface0 rounded-xl cursor-pointer transition-colors">
+                    <i class="fas fa-folder-plus text-subtext0"></i>
+                    <span class="font-medium text-sm text-subtext0">New Category</span>
+                </button>
+                <a href="/md" class="flex items-center gap-2 px-4 py-2 bg-base hover:bg-surface0 rounded-xl transition-colors no-underline">
+                    <i class="fas fa-note-sticky text-subtext0"></i>
+                    <span class="font-medium text-sm text-subtext0">Notepad</span>
+                </a>
             </div>
+        </section>
+
+        <section>
+            {{if not .Categories}}
+            <p class="text-center text-subtext0 py-12">No categories yet. Create one to get started.</p>
+            {{else}}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {{range .Categories}}
+                <a href="/c/{{.Name}}" class="block bg-base border border-transparent hover:border-surface1 rounded-3xl px-5 py-4 transition-colors group no-underline relative">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <h3 class="text-lg font-semibold text-text truncate">{{.Name}}</h3>
+                            <p class="text-sm text-subtext0 mt-1">
+                                {{if eq .TotalCount 0}}Empty
+                                {{else}}
+                                    {{if .FileCount}}{{.FileCount}} file{{if gt .FileCount 1}}s{{end}}{{end}}
+                                    {{if and .FileCount .TextCount}} · {{end}}
+                                    {{if .TextCount}}{{.TextCount}} snippet{{if gt .TextCount 1}}s{{end}}{{end}}
+                                    {{if and (or .FileCount .TextCount) .LinkCount}} · {{end}}
+                                    {{if .LinkCount}}{{.LinkCount}} link{{if gt .LinkCount 1}}s{{end}}{{end}}
+                                {{end}}
+                            </p>
+                        </div>
+                        <button onclick="event.preventDefault(); event.stopPropagation(); deleteCategory('{{.Name}}')"
+                            class="opacity-0 group-hover:opacity-100 ml-2 flex-shrink-0 w-8 h-8 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-all"
+                            title="Delete category">
+                            <i class="fas fa-trash text-sm"></i>
+                        </button>
+                    </div>
+                </a>
+                {{end}}
+            </div>
+            {{end}}
+        </section>
+    </main>
+</div>
+
+<!-- New Category Modal -->
+<div id="new-category-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
+    <div id="new-category-backdrop" class="absolute inset-0"></div>
+    <div class="bg-crust rounded-3xl p-6 w-full max-w-md z-10">
+        <h3 class="text-lg font-medium text-text mb-4">New Category</h3>
+        <form action="/category/create" method="POST">
+            <input type="text" name="name" required
+                placeholder="Category name (letters, numbers, hyphens)"
+                pattern="[\p{L}\p{N}\-_]+"
+                title="Letters, numbers, hyphens and underscores only"
+                class="w-full bg-base px-4 py-3 text-text placeholder-overlay1 focus:outline-none rounded-2xl mb-6">
             <div class="flex justify-end gap-4">
-                <button type="button" id="view-copy-button" class="px-4 py-2 bg-blue hover:bg-sapphire text-crust font-semibold rounded-xl transition-colors">Copy</button>
-                <button type="button" id="view-close-button" class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Close</button>
+                <button type="button" id="new-category-cancel"
+                    class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Cancel</button>
+                <button type="submit"
+                    class="px-4 py-2 bg-blue hover:bg-sapphire text-crust font-semibold rounded-xl transition-colors">Create</button>
             </div>
+        </form>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmation-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
+    <div class="bg-crust rounded-3xl p-6 w-full max-w-sm z-10 text-center">
+        <h3 id="confirmation-title" class="text-lg font-medium text-text mb-4">Are you sure?</h3>
+        <p id="confirmation-message" class="text-sm text-subtext1 mb-6">This action cannot be undone.</p>
+        <div class="flex justify-center gap-4">
+            <button id="confirm-cancel-button" class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Cancel</button>
+            <button id="confirm-action-button" class="px-4 py-2 bg-red hover:bg-maroon text-crust font-semibold rounded-xl transition-colors">Delete</button>
         </div>
     </div>
+</div>
 
-    <!-- Confirmation Modal -->
-    <div id="confirmation-modal" class="hidden fixed inset-0 bg-overlay2/70 dark:bg-black/70 flex items-center justify-center max-w-full p-4 z-50">
-        <div class="bg-crust rounded-3xl p-6 w-full max-w-sm z-10 text-center">
-            <h3 id="confirmation-title" class="text-lg font-medium text-text mb-4">Are you sure?</h3>
-            <p id="confirmation-message" class="text-sm text-subtext1 mb-6">Do you really want to delete this item? This process cannot be undone.</p>
-            <div class="flex justify-center gap-4">
-                <button id="confirm-cancel-button" class="px-4 py-2 bg-base hover:bg-surface0 text-subtext0 rounded-xl transition-colors font-medium">Cancel</button>
-                <button id="confirm-action-button" class="px-4 py-2 bg-red hover:bg-maroon text-crust font-semibold rounded-xl transition-colors">Delete</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // PWA Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful');
-                    })
-                    .catch(err => {
-                        console.log('ServiceWorker registration failed: ', err);
-                    });
-            });
-        }
-
-        const newItemModal = document.getElementById('new-item-modal');
-        const progressContainer = document.getElementById('progress-container');
-        const progressBar = document.getElementById('progress-bar');
-
-        // Reset the New Item modal
-        function closeAndResetNewItemModal() {
-            const form = document.getElementById('new-item-form');
-            const fileInput = document.getElementById('file-upload');
-            const fileNameDisplay = document.getElementById('file-name-display');
-            newItemModal.classList.add('hidden');
-            form.action = '/submit';
-            form.reset();
-            form.querySelector('[name="name"]').disabled = false;
-            fileInput.parentElement.parentElement.style.display = 'block';
-            fileInput.value = null;
-            fileNameDisplay.textContent = '';
-            progressContainer.classList.add('hidden');
-            progressBar.style.width = '0%';
-        }
-
-        // Modal handling for New Item
-        const newButton = document.getElementById('new-button');
-        const cancelButton = document.getElementById('cancel-button');
-        const modalBackdrop = document.getElementById('modal-backdrop');
-        newButton.addEventListener('click', () => newItemModal.classList.remove('hidden'));
-        cancelButton.addEventListener('click', closeAndResetNewItemModal);
-        modalBackdrop.addEventListener('click', closeAndResetNewItemModal);
-
-        // Modal handling for New Link
-        const newLinkButton = document.getElementById('new-link-button');
-        const newLinkModal = document.getElementById('new-link-modal');
-        const linkModalBackdrop = document.getElementById('link-modal-backdrop');
-        const linkCancelButton = document.getElementById('link-cancel-button');
-        newLinkButton.addEventListener('click', () => newLinkModal.classList.remove('hidden'));
-        linkCancelButton.addEventListener('click', () => newLinkModal.classList.add('hidden'));
-        linkModalBackdrop.addEventListener('click', () => newLinkModal.classList.add('hidden'));
-        document.getElementById('new-link-form').addEventListener('submit', () => {
-            newLinkModal.classList.add('hidden');
-        });
-        
-        // File upload and drag & drop handling
-        const fileInput = document.getElementById('file-upload');
-        const dropZone = fileInput.closest('label');
-        const fileNameDisplay = document.getElementById('file-name-display');
-        function updateFileDisplay(files) {
-            if (!files || files.length === 0) {
-                fileNameDisplay.textContent = '';
-                return;
-            }
-            if (files.length > 1) {
-                fileNameDisplay.textContent = `${files.length} files selected`;
-            } else {
-                fileNameDisplay.textContent = `Selected: ${files[0].name}`;
-            }
-        }
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('border-blue', 'bg-surface0');
-        });
-        dropZone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('border-blue', 'bg-surface0');
-        });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('border-blue', 'bg-surface0');
-            const droppedFiles = e.dataTransfer.files;
-            if (droppedFiles.length > 0) {
-                fileInput.files = droppedFiles;
-                updateFileDisplay(droppedFiles);
-            }
-        });
-        fileInput.addEventListener('change', () => {
-            updateFileDisplay(fileInput.files);
-        });
-
-        // Paste image from clipboard
-        newItemModal.addEventListener('paste', (e) => {
-            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            let files = [];
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
-                    const blob = items[i].getAsFile();
-                    const file = new File([blob], `pasted-image-${Date.now()}.png`, { type: blob.type });
-                    files.push(file);
-                }
-            }
-            if (files.length > 0) {
-                e.preventDefault();
-                const dataTransfer = new DataTransfer();
-                files.forEach(file => dataTransfer.items.add(file));
-                fileInput.files = dataTransfer.files;
-                updateFileDisplay(fileInput.files);
-            }
-        });
-
-        // Expiry cycle logic
-        let expiryOptions = []; // populated from backend
-        const expiryButton = document.getElementById('expiry-button');
-        const expiryText = document.getElementById('expiry-text');
-        const expiryValueInput = document.getElementById('expiryValue');
-        expiryButton.addEventListener('click', () => {
-            if (expiryOptions.length === 0) return;
-            const currentText = expiryText.innerText;
-            const currentIndex = expiryOptions.indexOf(currentText);
-            const nextIndex = (currentIndex === -1) ? 0 : (currentIndex + 1) % expiryOptions.length;
-            const newValue = expiryOptions[nextIndex];
-            if (newValue === "Custom") {
-                const customValue = prompt("Enter a custom expiration time (e.g., 1h, 30m, 2d, 1w, 1M, 1y):");
-                if (customValue) {
-                    expiryText.innerText = customValue;
-                    expiryValueInput.value = customValue;
-                }
-            } else {
-                expiryText.innerText = newValue;
-                expiryValueInput.value = newValue;
-            }
-        });
-
-        // Fetch expiry options and reverse link order on load
-        document.addEventListener('DOMContentLoaded', function() {
-            fetch('/getExpiryOptions').then(response => response.json()).then(options => {
-                if (options && options.length > 0) {
-                    expiryOptions = options;
-                    expiryText.innerText = expiryOptions[0];
-                    expiryValueInput.value = expiryOptions[0];
-                }
-            }).catch(error => console.error('Error fetching expiry options:', error));
-            // Reverse the order so newest are on top
-            const linksList = document.getElementById('links-list');
-            if (linksList) {
-                const links = Array.from(linksList.children);
-                links.reverse();
-                links.forEach(link => linksList.appendChild(link));
-            }
-        });
-
-        // Rename Modal Logic
-        const renameModal = document.getElementById('rename-modal');
-        const renameForm = document.getElementById('rename-form');
-        const oldNameDisplay = document.getElementById('old-name-display');
-        const newNameInput = document.getElementById('new-name-input');
-        const renameCancelButton = document.getElementById('rename-cancel-button');
-        const renameModalBackdrop = document.getElementById('rename-modal-backdrop');
-        function showRenameModal(id, currentName) {
-            renameForm.action = `/rename/${id}`;
-            oldNameDisplay.textContent = currentName;
-            newNameInput.value = currentName;
-            renameModal.classList.remove('hidden');
-            newNameInput.focus();
-            newNameInput.select();
-        }
-        renameCancelButton.addEventListener('click', () => renameModal.classList.add('hidden'));
-        renameModalBackdrop.addEventListener('click', () => renameModal.classList.add('hidden'));
-        renameForm.addEventListener('submit', (e) => {
-            if (!newNameInput.value) {
-                e.preventDefault(); 
-            }
-            renameModal.classList.add('hidden');
-        });
-
-        // Edit form logic
-        async function showEditForm(id, filename) {
-            const response = await fetch(`/raw/${id}`);
-            const content = await response.text();
-            const form = document.getElementById('new-item-form');
-            form.action = `/edit/${id}`;
-            form.querySelector('[name="name"]').value = filename;
-            form.querySelector('[name="name"]').disabled = true; 
-            form.querySelector('[name="content"]').value = content;
-            form.querySelector('[name="file-upload"]').parentElement.parentElement.style.display = 'none';
-            newItemModal.classList.remove('hidden');
-        }
-
-        // Copy to clipboard function
-        function copyToClipboard(text, buttonElement) {
-            if (!navigator.clipboard) {
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    showCopyFeedback(buttonElement);
-                } catch (err) {
-                    console.error('Fallback: Oops, unable to copy', err);
-                }
-                document.body.removeChild(textArea);
-                return;
-            }
-            navigator.clipboard.writeText(text).then(function() {
-                showCopyFeedback(buttonElement);
-            }, function(err) {
-                console.error('Async: Could not copy text: ', err);
-            });
-        }
-
-        function showCopyFeedback(buttonElement) {
-            const originalIcon = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<i class="fas fa-check text-green"></i>';
-            setTimeout(() => {
-                buttonElement.innerHTML = originalIcon;
-            }, 2000);
-        }
-        
-        // Confirmation Modal Logic
-        const confirmationModal = document.getElementById('confirmation-modal');
-        const confirmCancelButton = document.getElementById('confirm-cancel-button');
-        const confirmActionButton = document.getElementById('confirm-action-button');
-        let confirmCallback = null;
-        function showConfirmation(callback, title = 'Are you sure?', message = 'This action cannot be undone.') {
-            document.getElementById('confirmation-title').textContent = title;
-            document.getElementById('confirmation-message').textContent = message;
-            confirmationModal.classList.remove('hidden');
-            confirmCallback = callback;
-        }
-        confirmCancelButton.addEventListener('click', () => {
-            confirmationModal.classList.add('hidden');
-            confirmCallback = null;
-        });
-        confirmActionButton.addEventListener('click', () => {
-            if (confirmCallback) {
-                confirmCallback();
-            }
-            confirmationModal.classList.add('hidden');
-            confirmCallback = null;
-        });
-
-        function deleteItem(id) {
-            showConfirmation(() => {
-                fetch(`/delete/${id}`, {
-                    method: 'POST'
+<script>
+    // PWA Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then(() => {
+                    console.log('ServiceWorker registration successful');
                 })
-                .then(response => {
-                    if (response.ok) {
-                        window.location.reload();
-                    } else {
-                        console.error('Failed to delete the item.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error deleting item:', error);
+                .catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
                 });
-            }, 'Delete Item?', `Are you sure you want to delete this item? This action is permanent.`);
-        }
-
-        // View Snippet Modal Logic
-        const viewSnippetModal = document.getElementById('view-snippet-modal');
-        const viewModalBackdrop = document.getElementById('view-modal-backdrop');
-        const viewSnippetTitle = document.getElementById('view-snippet-title');
-        const viewSnippetContent = document.getElementById('view-snippet-content');
-        const viewCloseButton = document.getElementById('view-close-button');
-        const viewCopyButton = document.getElementById('view-copy-button');
-        let contentToCopy = '';
-        async function showViewModal(id, filename) {
-            try {
-                const response = await fetch(`/raw/${id}`);
-                if (!response.ok) throw new Error('Failed to fetch snippet content.');
-                
-                const content = await response.text();
-                contentToCopy = content;
-
-                viewSnippetTitle.textContent = filename;
-                viewSnippetContent.textContent = content;
-                viewSnippetModal.classList.remove('hidden');
-            } catch (error) {
-                console.error('Error showing view modal:', error);
-            }
-        }
-        viewCloseButton.addEventListener('click', () => viewSnippetModal.classList.add('hidden'));
-        viewModalBackdrop.addEventListener('click', () => viewSnippetModal.classList.add('hidden'));
-        viewCopyButton.addEventListener('click', () => {
-            copyToClipboard(contentToCopy, viewCopyButton);
         });
+    }
 
-        // New form submission with progress
-        const newItemForm = document.getElementById('new-item-form');
-        newItemForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const files = fileInput.files;
-            const isFileUpload = files.length > 0;
-            const isTextSubmission = this.elements.content.value.trim() !== '';
-            // Use old form if not file
-            if (!isFileUpload && isTextSubmission) {
-                this.submit();
-                return;
-            }
-            progressContainer.classList.remove('hidden');
-            const formData = new FormData(this);
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', this.action, true);
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            xhr.upload.onprogress = function(event) {
-                if (event.lengthComputable) {
-                    const percentComplete = (event.loaded / event.total) * 100;
-                    progressBar.style.width = percentComplete + '%';
-                }
-            };
-            xhr.onload = function() {
-                if (xhr.status >= 200 && xhr.status < 300) {
+    document.getElementById('new-category-button').addEventListener('click', () => {
+        document.getElementById('new-category-modal').classList.remove('hidden');
+    });
+    document.getElementById('new-category-cancel').addEventListener('click', () => {
+        document.getElementById('new-category-modal').classList.add('hidden');
+    });
+    document.getElementById('new-category-backdrop').addEventListener('click', () => {
+        document.getElementById('new-category-modal').classList.add('hidden');
+    });
+
+    const confirmationModal = document.getElementById('confirmation-modal');
+    const confirmCancelButton = document.getElementById('confirm-cancel-button');
+    const confirmActionButton = document.getElementById('confirm-action-button');
+    let confirmCallback = null;
+
+    function showConfirmation(callback, title = 'Are you sure?', message = 'This action cannot be undone.') {
+        document.getElementById('confirmation-title').textContent = title;
+        document.getElementById('confirmation-message').textContent = message;
+        confirmationModal.classList.remove('hidden');
+        confirmCallback = callback;
+    }
+
+    confirmCancelButton.addEventListener('click', () => {
+        confirmationModal.classList.add('hidden');
+        confirmCallback = null;
+    });
+
+    confirmActionButton.addEventListener('click', () => {
+        if (confirmCallback) {
+            confirmCallback();
+        }
+        confirmationModal.classList.add('hidden');
+        confirmCallback = null;
+    });
+
+    function deleteCategory(name) {
+        showConfirmation(() => {
+            fetch('/category/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'name=' + encodeURIComponent(name)
+            }).then(r => {
+                if (r.ok) {
                     window.location.reload();
                 } else {
-                    console.error('Upload failed:', xhr.statusText);
-                    progressContainer.classList.add('hidden');
+                    console.error('Failed to delete category');
                 }
-            };
-            xhr.onerror = function() {
-                console.error('An error occurred during the upload.');
-                progressContainer.classList.add('hidden');
-            };
-            xhr.send(formData);
-        });
+            }).catch(e => console.error('Error:', e));
+        }, 'Delete Category?', `Delete "${name}" and ALL its contents? This cannot be undone.`);
+    }
 
-        // SSE for live updates
-        let evtSource;
-        function connectSSE() {
-            if (evtSource) {
-                evtSource.close();
-            }
-            evtSource = new EventSource("/api/updates");
-            evtSource.onmessage = function(event) {
-                if (event.data === "content_updated") {
-                    const isModalOpen = document.querySelector('#new-item-modal:not(.hidden), #new-link-modal:not(.hidden), #rename-modal:not(.hidden), #view-snippet-modal:not(.hidden), #confirmation-modal:not(.hidden)');
-                    if (!isModalOpen) {
-                        setTimeout(() => { window.location.reload(); }, 250);
-                    }
-                }
-            };
-            evtSource.onerror = function() {
-                console.log("SSE connection error. Will attempt to reconnect.");
-                evtSource.close();
-                // Let browser reconnect with EventSource
-            };
+    // SSE for live updates
+    let evtSource;
+    function connectSSE() {
+        if (evtSource) {
+            evtSource.close();
         }
-
-        // SSE connect aftwr page load
-        window.addEventListener('load', function() {
-            connectSSE();
-        });
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden && (!evtSource || evtSource.readyState === EventSource.CLOSED)) {
-                console.log("Reconnecting SSE, tab visible");
-                connectSSE();
+        evtSource = new EventSource('/api/updates');
+        evtSource.onmessage = function(event) {
+            if (event.data === 'content_updated') {
+                const isModalOpen = document.querySelector('#new-category-modal:not(.hidden), #confirmation-modal:not(.hidden)');
+                if (!isModalOpen) {
+                    setTimeout(() => { window.location.reload(); }, 250);
+                }
             }
-        });
-    </script>
+        };
+        evtSource.onerror = function() {
+            console.log('SSE connection error. Will attempt to reconnect.');
+            evtSource.close();
+        };
+    }
+
+    window.addEventListener('load', function() {
+        connectSSE();
+    });
+
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && (!evtSource || evtSource.readyState === EventSource.CLOSED)) {
+            connectSSE();
+        }
+    });
+</script>
 </body>
 </html>

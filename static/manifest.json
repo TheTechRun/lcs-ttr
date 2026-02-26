@@ -1,6 +1,6 @@
 {
-    "name": "Local Content Share",
-    "short_name": "ContentShare",
+    "name": "Local Content Share TTR",
+    "short_name": "ContentShareTTR",
     "description": "Share content within your local network",
     "start_url": "/",
     "display": "standalone",

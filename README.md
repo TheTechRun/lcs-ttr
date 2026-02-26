@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="Local Content Share Logo" width="200">
-  <h1>Local Content Share</h1>
+  <img src="assets/logo.svg" alt="Local Content Share TTR Logo" width="200">
+  <h1>Local Content Share TTR</h1>
 
-  <a href="https://github.com/tanq16/local-content-share/actions/workflows/binary-build.yml"><img alt="Build Workflow" src="https://github.com/tanq16/local-content-share/actions/workflows/binary-build.yml/badge.svg"></a>&nbsp;<a href="https://github.com/tanq16/local-content-share/actions/workflows/docker-publish.yml"><img alt="Container Workflow" src="https://github.com/tanq16/local-content-share/actions/workflows/docker-publish.yml/badge.svg"></a><br>
-  <a href="https://github.com/Tanq16/local-content-share/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/tanq16/local-content-share"></a>&nbsp;<a href="https://hub.docker.com/r/tanq16/local-content-share"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/tanq16/local-content-share"></a><br><br>
+  <a href="https://github.com/tanq16/local-content-share-ttr/actions/workflows/binary-build.yml"><img alt="Build Workflow" src="https://github.com/tanq16/local-content-share-ttr/actions/workflows/binary-build.yml/badge.svg"></a>&nbsp;<a href="https://github.com/tanq16/local-content-share-ttr/actions/workflows/docker-publish.yml"><img alt="Container Workflow" src="https://github.com/tanq16/local-content-share-ttr/actions/workflows/docker-publish.yml/badge.svg"></a><br>
+  <a href="https://github.com/Tanq16/local-content-share-ttr/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/tanq16/local-content-share-ttr"></a>&nbsp;<a href="https://hub.docker.com/r/tanq16/local-content-share-ttr"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/tanq16/local-content-share-ttr"></a><br><br>
   <a href="#screenshots">Screenshots</a> &bull; <a href="#installation-and-usage">Install & Use</a> &bull; <a href="#tips-and-notes">Tips & Notes</a>
 </div>
 
@@ -13,10 +13,11 @@ A simple & elegant self-hosted app for **storing/sharing text snippets, files, a
 
 - Make plain text **snippets** available to **view/share** on any device in the local network
 - **Upload files** and make them available to **view/download** on any device in the local network
-- **Store links** to **share** in last in, first show order in its own section
+- **Store links** with optional **custom display titles** to share in last in, first show order
+- Organize content into named **categories** with per-category views and item counts
 - Built-in **Notepad** with **Markdown** editing and preview capabilities
 - **Rename** text snippets and files uploaded to easily find them in the UI
-- **Edit** text snippets to modify their content as needed
+- **Edit** text snippets and link titles to modify their content as needed
 - **Multi-file** **drag-n-drop** support for uploading files
 - Configurable **expiration (or TTL, i.e., time to live)** per file/snippet for Never, 1 hour, 4 hours, 1 day, or Custom
 - Use of **SSE** to automatically inform all clients of new/deleted/edited files
@@ -28,7 +29,7 @@ A simple & elegant self-hosted app for **storing/sharing text snippets, files, a
 Make sure to look into [Tips & Notes](#tips-and-notes) if you have questions about individual functionalities.
 
 > [!NOTE]
-> This application is meant to be deployed within your homelab only. There is no authentication mechanism implemented. If you are exposing to the public, ensure there is authentication fronting it and non-destructive users using it.
+> This application is meant to be deployed within your homelab only. Built-in username/password login is configured via environment variables. If you are exposing to the public internet, still place it behind a proper reverse proxy and HTTPS.
 
 ## Screenshots
 
@@ -44,24 +45,35 @@ Make sure to look into [Tips & Notes](#tips-and-notes) if you have questions abo
 Use `docker` CLI one liner and setup a persistence directory (so a container failure does not delete your data):
 
 ```bash
-mkdir $HOME/.localcontentshare
+mkdir $HOME/.localcontentsharettrttr
 ```
 ```bash
-docker run --name local-content-share \
+docker run --name local-content-share-ttr \
   -p 8080:8080 \
-  -v $HOME/.localcontentshare:/app/data \
-  tanq16/local-content-share:main
+  -v $HOME/.localcontentsharettrttr:/app/data \
+  -e LCS_USERNAME=change-this \
+  -e LCS_PASSWORD=change-this \
+  -e LCS_SECRET_KEY=change-this-to-a-long-random-string \
+  tanq16/local-content-share-ttr:main
 ```
 
 The application will be available at `http://localhost:8080` (or your server IP).
+
+Authentication settings:
+- `LCS_USERNAME` (required)
+- `LCS_PASSWORD` (required)
+- `LCS_SECRET_KEY` (required, used to sign session cookies)
+- `LCS_SESSION_EXPIRY_DAYS` (optional, defaults to 30)
 
 You can also use the following compose file with container managers like Portainer and Dockge (remember to change the mounted volume):
 
 ```yaml
 services:
-  contentshare:
-    image: tanq16/local-content-share:main
-    container_name: local-content-share
+  contentsharettr:
+    image: tanq16/local-content-share-ttr:main
+    container_name: local-content-share-ttr
+    env_file:
+      - .env
     volumes:
       - /home/tanq/lcshare:/app/data # Change as needed
     ports:
@@ -70,23 +82,23 @@ services:
 
 ### Using Binary
 
-Download the appropriate binary for your system from the [latest release](https://github.com/tanq16/local-content-share/releases/latest).
+Download the appropriate binary for your system from the [latest release](https://github.com/tanq16/local-content-share-ttr/releases/latest).
 
-Make the binary executable (for Linux/macOS) with `chmod +x local-content-share-*` and then run the binary with `./local-content-share-*`. The application will be available at `http://localhost:8080`.
+Make the binary executable (for Linux/macOS) with `chmod +x local-content-share-ttr-*` and then run the binary with `./local-content-share-ttr-*`. The application will be available at `http://localhost:8080`.
 
 ### Local development
 
 With `Go 1.23+` installed, run the following to download the binary to your GOBIN:
 
 ```bash
-go install github.com/tanq16/local-content-share@latest
+go install github.com/tanq16/local-content-share-ttr@latest
 ```
 
 Or, you can build from source like so:
 
 ```bash
-git clone https://github.com/tanq16/local-content-share.git && \
-cd local-content-share && \
+git clone https://github.com/tanq16/local-content-share-ttr.git && \
+cd local-content-share-ttr && \
 go build .
 ```
 
@@ -113,6 +125,15 @@ go build .
    - For files, it shows raw text, images, PDFs, etc. (basically whatever the browser will do)
 - To download files, click the download icon
 - To delete content, click the trash icon
+- To manage categories:
+   - The home page lists all categories with their item counts
+   - Create a new category via the category creation form
+   - Delete a category via the category delete option (removes the category and its contents)
+   - Navigate to a category at `/c/{category-name}`
+   - Reserved names that cannot be used for categories: `notepad`, `files`, `text`
+- To add a link with a custom title:
+   - Store links as `title\tURL` (title, tab character, URL) or just a plain URL
+   - Edit an existing link's title or URL via the link edit option
 - To set expiration for a file or snippet
    - Click the clock icon with the "Never" text (signifying no expiry) to cycle between times
    - For a non-"Never" expiration, the file will automatically be removed after the specified period
@@ -131,7 +152,7 @@ go build .
 
 Reverse proxies are fairly common in homelab settings to assign SSL certificates and use domains. The reason for this note is that some reverse proxy settings may interfere with the functioning of this app. Primarily, there are 2 features that could be affected:
 
-- File Size: reverse proxy software may impose a limit on file sizes, but Local Content Share does not
+- File Size: reverse proxy software may impose a limit on file sizes, but Local Content Share TTR does not
 - Upload Progress: file upload progress for large files may not be visible until the file has been uploaded because of buffering setups on rever proxy software
 
 Following is a sample fix for Nginx Proxy Manager, please look into equivalent settings for other reverse proxy setups like Caddy.
@@ -147,8 +168,16 @@ proxy_send_timeout 3600s;
 proxy_connect_timeout 3600s;
 ```
 
-This configuration will set the maximum accept size for file transfer through NPM as 5 GB and will also disable buffering so interaction will take place directly with Local Content Share.
+This configuration will set the maximum accept size for file transfer through NPM as 5 GB and will also disable buffering so interaction will take place directly with Local Content Share TTR.
 
 ### Backend Data Structure
 
-The application creates a `data` directory to store all uploaded files, text snippets, notepad notes, and links (in `files/`, `text/`, `md.file`, and `links.file` respectively). File expirations are saved in an `expiration.json` file in the data directory. Make sure the application has write permissions for the directory where it runs.
+The application creates a `data` directory to store all content. Content is organized into **categories**, each stored as a named subdirectory under `data/`. Within each category, files and text snippets live in `files/` and `text/` subdirectories respectively. The notepad and links are stored as `md.file` and `links.file` inside each category directory. File expirations are saved in an `expiration.json` file in the data directory.
+
+The names `notepad`, `files`, and `text` are reserved and cannot be used as category names. Make sure the application has write permissions for the directory where it runs.
+
+URLs for raw content and downloads follow the pattern `/raw/{category}/text/{name}` and `/download/{category}/files/{name}` respectively.
+
+## Credits
+
+This project is a fork of [local-content-share](https://github.com/Tanq16/local-content-share) by [Tanq16](https://github.com/Tanq16). All credit for the original concept, design, and implementation goes to them. This fork adds categories, link titles, and authentication on top of that foundation.
