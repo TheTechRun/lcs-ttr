@@ -2,10 +2,14 @@
   <img src="assets/logo.svg" alt="Local Content Share TTR Logo" width="200">
   <h1>Local Content Share TTR</h1>
 
-  <a href="https://github.com/tanq16/local-content-share-ttr/actions/workflows/binary-build.yml"><img alt="Build Workflow" src="https://github.com/tanq16/local-content-share-ttr/actions/workflows/binary-build.yml/badge.svg"></a>&nbsp;<a href="https://github.com/tanq16/local-content-share-ttr/actions/workflows/docker-publish.yml"><img alt="Container Workflow" src="https://github.com/tanq16/local-content-share-ttr/actions/workflows/docker-publish.yml/badge.svg"></a><br>
-  <a href="https://github.com/Tanq16/local-content-share-ttr/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/tanq16/local-content-share-ttr"></a>&nbsp;<a href="https://hub.docker.com/r/tanq16/local-content-share-ttr"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/tanq16/local-content-share-ttr"></a><br><br>
+  <a href="https://github.com/TheTechRun/lcs-ttr/actions/workflows/binary-build.yml"><img alt="Build Workflow" src="https://github.com/TheTechRun/lcs-ttr/actions/workflows/binary-build.yml/badge.svg"></a>&nbsp;<a href="https://github.com/TheTechRun/lcs-ttr/actions/workflows/docker-publish.yml"><img alt="Container Workflow" src="https://github.com/TheTechRun/lcs-ttr/actions/workflows/docker-publish.yml/badge.svg"></a><br>
+  <a href="https://github.com/TheTechRun/lcs-ttr/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/TheTechRun/lcs-ttr"></a>&nbsp;<a href="https://hub.docker.com/r/thetechrun/lcs-ttr"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/thetechrun/lcs-ttr"></a><br><br>
   <a href="#screenshots">Screenshots</a> &bull; <a href="#installation-and-usage">Install & Use</a> &bull; <a href="#tips-and-notes">Tips & Notes</a>
 </div>
+
+---
+
+> **Fork of [local-content-share](https://github.com/Tanq16/local-content-share) by [Tanq16](https://github.com/Tanq16).** All credit for the original concept, design, and implementation goes to them. This fork adds categories, link titles, and authentication on top of that foundation.
 
 ---
 
@@ -45,16 +49,16 @@ Make sure to look into [Tips & Notes](#tips-and-notes) if you have questions abo
 Use `docker` CLI one liner and setup a persistence directory (so a container failure does not delete your data):
 
 ```bash
-mkdir $HOME/.localcontentsharettrttr
+mkdir $HOME/.lcs-ttr
 ```
 ```bash
-docker run --name local-content-share-ttr \
+docker run --name lcs-ttr \
   -p 8080:8080 \
-  -v $HOME/.localcontentsharettrttr:/app/data \
+  -v $HOME/.lcs-ttr:/app/data \
   -e LCS_USERNAME=change-this \
   -e LCS_PASSWORD=change-this \
   -e LCS_SECRET_KEY=change-this-to-a-long-random-string \
-  tanq16/local-content-share-ttr:main
+  thetechrun/lcs-ttr:main
 ```
 
 The application will be available at `http://localhost:8080` (or your server IP).
@@ -69,36 +73,36 @@ You can also use the following compose file with container managers like Portain
 
 ```yaml
 services:
-  contentsharettr:
-    image: tanq16/local-content-share-ttr:main
-    container_name: local-content-share-ttr
+  lcs-ttr:
+    image: thetechrun/lcs-ttr:main
+    container_name: lcs-ttr
     env_file:
       - .env
     volumes:
-      - /home/tanq/lcshare:/app/data # Change as needed
+      - /home/user/lcs-ttr:/app/data # Change as needed
     ports:
       - 8080:8080
 ```
 
 ### Using Binary
 
-Download the appropriate binary for your system from the [latest release](https://github.com/tanq16/local-content-share-ttr/releases/latest).
+Download the appropriate binary for your system from the [latest release](https://github.com/TheTechRun/lcs-ttr/releases/latest).
 
-Make the binary executable (for Linux/macOS) with `chmod +x local-content-share-ttr-*` and then run the binary with `./local-content-share-ttr-*`. The application will be available at `http://localhost:8080`.
+Make the binary executable (for Linux/macOS) with `chmod +x lcs-ttr-*` and then run the binary with `./lcs-ttr-*`. The application will be available at `http://localhost:8080`.
 
 ### Local development
 
 With `Go 1.23+` installed, run the following to download the binary to your GOBIN:
 
 ```bash
-go install github.com/tanq16/local-content-share-ttr@latest
+go install github.com/TheTechRun/lcs-ttr@latest
 ```
 
 Or, you can build from source like so:
 
 ```bash
-git clone https://github.com/tanq16/local-content-share-ttr.git && \
-cd local-content-share-ttr && \
+git clone https://github.com/TheTechRun/lcs-ttr.git && \
+cd lcs-ttr && \
 go build .
 ```
 
@@ -177,7 +181,3 @@ The application creates a `data` directory to store all content. Content is orga
 The names `notepad`, `files`, and `text` are reserved and cannot be used as category names. Make sure the application has write permissions for the directory where it runs.
 
 URLs for raw content and downloads follow the pattern `/raw/{category}/text/{name}` and `/download/{category}/files/{name}` respectively.
-
-## Credits
-
-This project is a fork of [local-content-share](https://github.com/Tanq16/local-content-share) by [Tanq16](https://github.com/Tanq16). All credit for the original concept, design, and implementation goes to them. This fork adds categories, link titles, and authentication on top of that foundation.
