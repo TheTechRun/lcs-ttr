@@ -1,13 +1,13 @@
 services:
   local-content-share-ttr:
-    container_name: lcs-ttr
+    container_name: lcs-ttr-dev
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env
     ports:
-      - "8080:8080"
+      - "5008:8080"
     volumes:
-      - ./../data:/app/data
+      - ../data:/app/data
     restart: unless-stopped

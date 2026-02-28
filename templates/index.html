@@ -127,7 +127,7 @@
             {{else}}
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {{range .Categories}}
-                <a href="/c/{{.Name}}" class="block bg-base border border-transparent hover:border-surface1 rounded-3xl px-5 py-4 transition-colors group no-underline relative">
+                <a href="/c/{{pathEscape .Name}}" class="block bg-base border border-transparent hover:border-surface1 rounded-3xl px-5 py-4 transition-colors group no-underline relative">
                     <div class="flex items-start justify-between">
                         <div class="min-w-0">
                             <h3 class="text-lg font-semibold text-text truncate">{{.Name}}</h3>
@@ -143,7 +143,7 @@
                             </p>
                         </div>
                         <button onclick="event.preventDefault(); event.stopPropagation(); deleteCategory('{{.Name}}')"
-                            class="opacity-0 group-hover:opacity-100 ml-2 flex-shrink-0 w-8 h-8 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-all"
+                            class="ml-2 flex-shrink-0 w-8 h-8 flex items-center justify-center bg-base hover:bg-surface0 text-subtext0 rounded-full transition-all"
                             title="Delete category">
                             <i class="fas fa-trash text-sm"></i>
                         </button>

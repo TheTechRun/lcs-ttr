@@ -401,6 +401,37 @@ func sanitizeSingleLine(value string) string {
 	return strings.TrimSpace(value)
 }
 
+func isInvalidCategoryPathSegment(category string) bool {
+	return category == "" || strings.Contains(category, "/") || strings.Contains(category, "\\") || reservedNames[category]
+}
+
+// resolveCategoryName returns the canonical category directory name.
+// It first tries exact match, then falls back to case-insensitive matching.
+func resolveCategoryName(category string) (string, bool, error) {
+	catPath := filepath.Join("data", category)
+	info, err := os.Stat(catPath)
+	if err == nil {
+		return category, info.IsDir(), nil
+	}
+	if !os.IsNotExist(err) {
+		return "", false, err
+	}
+
+	entries, err := os.ReadDir("data")
+	if err != nil {
+		return "", false, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() || reservedNames[e.Name()] {
+			continue
+		}
+		if strings.EqualFold(e.Name(), category) {
+			return e.Name(), true, nil
+		}
+	}
+	return "", false, nil
+}
+
 func parseStoredLink(line string) (string, string) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -646,7 +677,9 @@ func main() {
 		}
 	}()
 
-	tmpl := template.Must(template.ParseFS(content, "templates/*.html"))
+	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
+		"pathEscape": url.PathEscape,
+	}).ParseFS(content, "templates/*.html"))
 
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -704,12 +737,21 @@ func main() {
 
 	http.HandleFunc("/c/", func(w http.ResponseWriter, r *http.Request) {
 		category := strings.TrimPrefix(r.URL.Path, "/c/")
-		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+		if isInvalidCategoryPathSegment(category) {
 			http.Error(w, "Invalid category", http.StatusBadRequest)
 			return
 		}
-		if _, err := os.Stat(filepath.Join("data", category)); os.IsNotExist(err) {
+		resolvedCategory, found, err := resolveCategoryName(category)
+		if err != nil {
+			http.Error(w, "Failed to resolve category", http.StatusInternalServerError)
+			return
+		}
+		if !found {
 			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+		if resolvedCategory != category {
+			http.Redirect(w, r, "/c/"+url.PathEscape(resolvedCategory), http.StatusSeeOther)
 			return
 		}
 
@@ -748,11 +790,14 @@ func main() {
 			http.Error(w, "Invalid category name", http.StatusBadRequest)
 			return
 		}
-		catPath := filepath.Join("data", name)
-		if _, err := os.Stat(catPath); err == nil {
+		if _, found, err := resolveCategoryName(name); err != nil {
+			http.Error(w, "Failed to resolve category", http.StatusInternalServerError)
+			return
+		} else if found {
 			http.Error(w, "Category already exists", http.StatusConflict)
 			return
 		}
+		catPath := filepath.Join("data", name)
 		if err := os.MkdirAll(filepath.Join(catPath, "files"), 0755); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -762,7 +807,7 @@ func main() {
 			return
 		}
 		notifyContentChange()
-		http.Redirect(w, r, "/c/"+name, http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+url.PathEscape(name), http.StatusSeeOther)
 	})
 
 	http.HandleFunc("/category/delete", func(w http.ResponseWriter, r *http.Request) {
@@ -771,15 +816,21 @@ func main() {
 			return
 		}
 		name := strings.TrimSpace(r.FormValue("name"))
-		if name == "" || reservedNames[name] || strings.Contains(name, "/") {
+		if isInvalidCategoryPathSegment(name) {
 			http.Error(w, "Invalid category name", http.StatusBadRequest)
 			return
 		}
-		catPath := filepath.Join("data", name)
-		if _, err := os.Stat(catPath); os.IsNotExist(err) {
+		resolvedName, found, err := resolveCategoryName(name)
+		if err != nil {
+			http.Error(w, "Failed to resolve category", http.StatusInternalServerError)
+			return
+		}
+		if !found {
 			http.Error(w, "Category not found", http.StatusNotFound)
 			return
 		}
+		name = resolvedName
+		catPath := filepath.Join("data", name)
 
 		expirationTracker.mu.Lock()
 		for key := range expirationTracker.Expirations {
@@ -948,14 +999,20 @@ func main() {
 			return
 		}
 		category := strings.TrimSpace(r.FormValue("category"))
-		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+		if isInvalidCategoryPathSegment(category) {
 			http.Error(w, "Invalid category", http.StatusBadRequest)
 			return
 		}
-		if _, err := os.Stat(filepath.Join("data", category)); os.IsNotExist(err) {
+		resolvedCategory, found, err := resolveCategoryName(category)
+		if err != nil {
+			http.Error(w, "Failed to resolve category", http.StatusInternalServerError)
+			return
+		}
+		if !found {
 			http.Error(w, "Category not found", http.StatusBadRequest)
 			return
 		}
+		category = resolvedCategory
 		entryType := r.FormValue("type")
 		expiryOption := r.FormValue("expiry")
 		content := strings.TrimSpace(r.FormValue("content"))
@@ -1053,7 +1110,7 @@ func main() {
 			w.Write([]byte("Success"))
 			return
 		}
-		http.Redirect(w, r, "/c/"+category, http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+url.PathEscape(category), http.StatusSeeOther)
 	})
 
 	http.HandleFunc("/link/edit", func(w http.ResponseWriter, r *http.Request) {
@@ -1062,10 +1119,20 @@ func main() {
 			return
 		}
 		category := strings.TrimSpace(r.FormValue("category"))
-		if category == "" || strings.Contains(category, "/") || reservedNames[category] {
+		if isInvalidCategoryPathSegment(category) {
 			http.Error(w, "Invalid category", http.StatusBadRequest)
 			return
 		}
+		resolvedCategory, found, err := resolveCategoryName(category)
+		if err != nil {
+			http.Error(w, "Failed to resolve category", http.StatusInternalServerError)
+			return
+		}
+		if !found {
+			http.Error(w, "Category not found", http.StatusBadRequest)
+			return
+		}
+		category = resolvedCategory
 		oldLine := strings.TrimSpace(r.FormValue("old_line"))
 		if oldLine == "" {
 			http.Error(w, "Missing original link", http.StatusBadRequest)
@@ -1122,7 +1189,7 @@ func main() {
 			return
 		}
 		notifyContentChange()
-		http.Redirect(w, r, "/c/"+category, http.StatusSeeOther)
+		http.Redirect(w, r, "/c/"+url.PathEscape(category), http.StatusSeeOther)
 	})
 
 	http.HandleFunc("/rename/", func(w http.ResponseWriter, r *http.Request) {

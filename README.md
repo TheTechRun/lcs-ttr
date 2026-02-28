@@ -9,7 +9,7 @@
 
 ---
 
-> **Fork of [local-content-share](https://github.com/Tanq16/local-content-share) by [Tanq16](https://github.com/Tanq16).** All credit for the original concept, design, and implementation goes to them. This fork adds categories, link titles, and authentication on top of that foundation.
+> **Fork of [local-content-share](https://github.com/Tanq16/local-content-share) by [Tanq16](https://github.com/Tanq16).** All credit for the original concept, design, and implementation goes to them. This fork adds categories, sorting, filtering, links, and authentication on top of that foundation.
 
 ---
 
