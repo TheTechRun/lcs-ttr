@@ -1,6 +1,7 @@
 services:
   lcs-ttr:
     image: thetechrun/lcs-ttr:main
+    pull_policy: always
     container_name: lcs-ttr
     env_file:
       - .env
